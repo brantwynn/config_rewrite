@@ -67,7 +67,7 @@ class ConfigRewriteInstallSubscriber implements EventSubscriberInterface {
         $rewrite = NestedArray::mergeDeep($config->getRawData(), $config_rewrite);
         $config->setData($rewrite)->save();
         $msg = t('@config rewritten by @module', ['@config' => $file->name, '@module' => $module->getName()]);
-        $this->loggerFactory->get('config_rewrite')->notice($msg);
+        $this->loggerFactory->get('config_rewrite')->info($msg);
       }
     }
   }
