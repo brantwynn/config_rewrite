@@ -2,14 +2,15 @@
 
 namespace Drupal\config_rewrite\EventSubscriber;
 
-use Symfony\Component\EventDispatcher\EventSubscriberInterface;
-use Symfony\Component\EventDispatcher\Event;
-use Symfony\Component\Yaml\Yaml;
-use Drupal\Core\Extension\ModuleHandler;
-use Drupal\Component\Utility\NestedArray;
-use Drupal\Core\Extension\ModuleEvents;
 use Drupal\Core\Config\ConfigFactory;
+use Drupal\Core\Extension\ModuleHandler;
+use Drupal\Core\Extension\Extension;
+use Drupal\Core\Extension\ModuleEvents;
 use Drupal\Core\Logger\LoggerChannelFactoryInterface;
+use Drupal\Component\Utility\NestedArray;
+use Symfony\Component\EventDispatcher\Event;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+use Symfony\Component\Yaml\Yaml;
 
 /**
  * Class ConfigRewriteInstallSubscriber.
@@ -57,17 +58,26 @@ class ConfigRewriteInstallSubscriber implements EventSubscriberInterface {
    * @param \Symfony\Component\EventDispatcher\Event $event
    */
   public function module_install_config_rewrite(Event $event) {
-    $module = $this->moduleHandler->getModule($event->getModule());
+    $module = $event->getModule();
+    if ($this->moduleHandler->moduleExists($module)) {
+      $this->rewriteModuleConfig($this->moduleHandler->getModule($module));
+    }
+  }
+
+  /**
+   * @param \Drupal\Core\Extension\Extension $module
+   */
+  public function rewriteModuleConfig(Extension $module) {
     $rewrite_dir = $module->getPath() . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'rewrite';
     if (file_exists($rewrite_dir) && $files = file_scan_directory($rewrite_dir, '/^.*\.yml$/i')) {
       foreach ($files as $file) {
         $rewrite_file = file_get_contents($rewrite_dir . DIRECTORY_SEPARATOR . $file->name . '.yml');
-        $config_rewrite = Yaml::parse($rewrite_file);
         $config = $this->configFactory->getEditable($file->name);
-        $rewrite = NestedArray::mergeDeep($config->getRawData(), $config_rewrite);
-        $config->setData($rewrite)->save();
-        $msg = t('@config rewritten by @module', ['@config' => $file->name, '@module' => $module->getName()]);
-        $this->loggerFactory->get('config_rewrite')->info($msg);
+        $rewrite = NestedArray::mergeDeep($config->getRawData(), Yaml::parse($rewrite_file));
+        $result = ($config->setData($rewrite)->save() ? 'rewritten' : 'not rewritten');
+        $replace = ['@config' => $file->name, '@result' => $result, '@module' => $module->getName()];
+        $message = t('@config @result by @module', $replace);
+        $this->loggerFactory->get('config_rewrite')->info($message);
       }
     }
   }
