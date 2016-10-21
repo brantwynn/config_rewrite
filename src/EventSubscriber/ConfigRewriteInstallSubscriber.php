@@ -92,15 +92,27 @@ class ConfigRewriteInstallSubscriber implements EventSubscriberInterface {
     $rewrite_dir = $module->getPath() . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'rewrite';
     if (file_exists($rewrite_dir) && $files = file_scan_directory($rewrite_dir, '/^.*\.yml$/i')) {
       foreach ($files as $file) {
-        $rewrite_file = file_get_contents($rewrite_dir . DIRECTORY_SEPARATOR . $file->name . '.yml');
+        $rewrite = Yaml::parse(file_get_contents($rewrite_dir . DIRECTORY_SEPARATOR . $file->name . '.yml'));
         $config = $this->configFactory->getEditable($file->name);
-        $rewrite = NestedArray::mergeDeep($config->getRawData(), Yaml::parse($rewrite_file));
+        $rewrite = $this->rewriteConfig($config->getRawData(), $rewrite);
         $result = ($config->setData($rewrite)->save() ? 'rewritten' : 'not rewritten');
         $replace = ['@config' => $file->name, '@result' => $result, '@module' => $module->getName()];
         $message = t('@config @result by @module', $replace);
         $this->loggerFactory->get('config_rewrite')->info($message);
       }
     }
+  }
+
+  /**
+   * @param array $config
+   * @param array $rewrite
+   * @return array
+   */
+  public function rewriteConfig(Array $config, Array $rewrite) {
+    if (isset($rewrite['config_rewrite']) && $rewrite['config_rewrite'] == 'replace') {
+      return $rewrite;
+    }
+    return NestedArray::mergeDeep($config, $rewrite);
   }
 
 }
