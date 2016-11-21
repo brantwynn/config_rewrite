@@ -39,6 +39,13 @@ function config_rewrite_rewrite_module_config($module) {
 
       // Rewrite and save the config.
       $rewrite = _config_rewrite_rewrite_config($original_config->getRawData(), $rewrite);
+
+      // Unset 'config_rewrite' key before saving rewritten values.
+      if (isset($rewrite['config_rewrite'])) {
+        unset($rewrite['config_rewrite']);
+      }
+
+      // Save the rewritten configuration data.
       $result = $original_config->setData($rewrite)->save() ? 'rewritten' : 'not rewritten';
 
       // Log a message indicating whether the config was rewritten or not.
@@ -63,6 +70,5 @@ function _config_rewrite_rewrite_config($original_config, $rewrite) {
   if (isset($original_config['config_rewrite']) && $original_config['config_rewrite'] == 'replace') {
     return $original_config;
   }
-
   return NestedArray::mergeDeep($original_config, $rewrite);
 }
