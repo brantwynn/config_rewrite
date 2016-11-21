@@ -92,10 +92,17 @@ class ConfigRewriteInstallSubscriber implements EventSubscriberInterface {
     $rewrite_dir = $module->getPath() . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'rewrite';
     if (file_exists($rewrite_dir) && $files = file_scan_directory($rewrite_dir, '/^.*\.yml$/i')) {
       foreach ($files as $file) {
+        // Parse YAML and rewrite configuration.
         $rewrite = Yaml::parse(file_get_contents($rewrite_dir . DIRECTORY_SEPARATOR . $file->name . '.yml'));
         $config = $this->configFactory->getEditable($file->name);
         $rewrite = $this->rewriteConfig($config->getRawData(), $rewrite);
+        // Unset 'config_rewrite' key before saving rewritten data.
+        if (isset($rewrite['config_rewrite'])) {
+          unset($rewrite['config_rewrite']);
+        }
+        // Save rewritten configuration data.
         $result = ($config->setData($rewrite)->save() ? 'rewritten' : 'not rewritten');
+        // Log the results.
         $replace = ['@config' => $file->name, '@result' => $result, '@module' => $module->getName()];
         $message = t('@config @result by @module', $replace);
         $this->loggerFactory->get('config_rewrite')->info($message);
