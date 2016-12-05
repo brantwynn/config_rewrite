@@ -67,8 +67,8 @@ function config_rewrite_rewrite_module_config($module) {
  *   The rewritten config.
  */
 function _config_rewrite_rewrite_config($original_config, $rewrite) {
-  if (isset($original_config['config_rewrite']) && $original_config['config_rewrite'] == 'replace') {
-    return $original_config;
+  if (isset($rewrite['config_rewrite']) && $rewrite['config_rewrite'] == 'replace') {
+    return $rewrite;
   }
   return NestedArray::mergeDeep($original_config, $rewrite);
 }
