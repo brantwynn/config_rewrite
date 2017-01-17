@@ -5,70 +5,11 @@
  * Allows modules to rewrite configuration provided by other extensions.
  */
 
-use Drupal\Component\Utility\NestedArray;
-use Symfony\Component\Yaml\Yaml;
-
 /**
  * Implements hook_module_preinstall().
  *
  * Allow config to be rewritten before a module is installed.
  */
 function config_rewrite_module_preinstall($module) {
-  config_rewrite_rewrite_module_config($module);
-}
-
-/**
- * Rewrites module config.
- *
- * @param $module
- *   The name of the module (without the .module extension).
- */
-function config_rewrite_rewrite_module_config($module) {
-  // Load the module extension.
-  $extension = \Drupal::moduleHandler()->getModule($module);
-
-  // Config rewrites are stored in 'modulename/config/rewrite'.
-  $rewrite_dir = $extension->getPath() . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'rewrite';
-
-  // Scan the rewrite directory for rewrites.
-  if (file_exists($rewrite_dir) && $files = file_scan_directory($rewrite_dir, '/^.*\.yml$/i')) {
-    foreach ($files as $file) {
-      // Parse the rewrites and retrieve the original config.
-      $rewrite = Yaml::parse(file_get_contents($rewrite_dir . DIRECTORY_SEPARATOR . $file->name . '.yml'));
-      $original_config = \Drupal::configFactory()->getEditable($file->name);
-
-      // Rewrite and save the config.
-      $rewrite = _config_rewrite_rewrite_config($original_config->getRawData(), $rewrite);
-
-      // Unset 'config_rewrite' key before saving rewritten values.
-      if (isset($rewrite['config_rewrite'])) {
-        unset($rewrite['config_rewrite']);
-      }
-
-      // Save the rewritten configuration data.
-      $result = $original_config->setData($rewrite)->save() ? 'rewritten' : 'not rewritten';
-
-      // Log a message indicating whether the config was rewritten or not.
-      $message = t('@config @result by @module', ['@config' => $file->name, '@result' => $result, '@module' => $extension->getName()]);
-      \Drupal::logger('config_rewrite')->info($message);
-    }
-  }
-}
-
-/**
- * Helper function to rewrite config.
- *
- * @param array $original_config
- *   The original configuration array to rewrite.
- * @param array $rewrite
- *   An array of configuration rewrites.
- *
- * @return array
- *   The rewritten config.
- */
-function _config_rewrite_rewrite_config($original_config, $rewrite) {
-  if (isset($rewrite['config_rewrite']) && $rewrite['config_rewrite'] == 'replace') {
-    return $rewrite;
-  }
-  return NestedArray::mergeDeep($original_config, $rewrite);
+  \Drupal::service('config_rewrite.config_rewriter')->rewriteModuleConfig($module);
 }
