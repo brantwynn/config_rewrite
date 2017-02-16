@@ -3,7 +3,6 @@
 namespace Drupal\config_rewrite;
 
 use Drupal\Component\Utility\NestedArray;
-use Drupal\config_rewrite\ConfigRewriterInterface;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Extension\ModuleHandlerInterface;
 use Drupal\Core\Logger\LoggerChannelInterface;
@@ -20,6 +19,13 @@ class ConfigRewriter implements ConfigRewriterInterface {
    * @var \Drupal\Core\Config\ConfigFactoryInterface
    */
   protected $configFactory;
+
+  /**
+   * The language config factory override service.
+   *
+   * @var \Drupal\language\Config\LanguageConfigFactoryOverrideInterface|NULL
+   */
+  protected $languageConfigFactoryOverride;
 
   /**
    * The module handler.
@@ -44,11 +50,14 @@ class ConfigRewriter implements ConfigRewriterInterface {
    *   The module handler.
    * @param \Drupal\Core\Logger\LoggerChannelInterface $logger
    *   A logger channel.
+   * @param \Drupal\language\Config\LanguageConfigFactoryOverrideInterface|NULL $language_config_factory_override
+   *   (Optional) The language config factory override service.
    */
-  public function __construct(ConfigFactoryInterface $config_factory, ModuleHandlerInterface $module_handler, LoggerChannelInterface $logger) {
+  public function __construct(ConfigFactoryInterface $config_factory, ModuleHandlerInterface $module_handler, LoggerChannelInterface $logger, $language_config_factory_override) {
     $this->configFactory = $config_factory;
     $this->moduleHandler = $module_handler;
     $this->logger = $logger;
+    $this->languageConfigFactoryOverride = $language_config_factory_override;
   }
 
   /**
@@ -62,17 +71,47 @@ class ConfigRewriter implements ConfigRewriterInterface {
     $extension = $this->moduleHandler->getModule($module);
 
     // Config rewrites are stored in 'modulename/config/rewrite'.
-    $rewrite_dir = $extension->getPath() . DIRECTORY_SEPARATOR . ConfigRewriterInterface::CONFIG_REWRITE_DIRECTORY;
+    $dir_base = $extension->getPath() . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'rewrite';
+    $languages = \Drupal::languageManager()->getLanguages();
 
+    // Rewrite configuration for the default language.
+    $this->rewriteDirectoryConfig($extension, $dir_base);
+
+    // Rewrite configuration for each enabled language.
+    foreach ($languages as $langcode => $language) {
+      $rewrite_dir = $dir_base . DIRECTORY_SEPARATOR . 'language' . DIRECTORY_SEPARATOR . $langcode;
+      $this->rewriteDirectoryConfig($extension, $rewrite_dir, $langcode);
+    }
+  }
+
+  /**
+   * Finds files in a given directory and uses them to rewrite active config.
+   *
+   * @param \Drupal\Core\Extension\Extension $extension
+   *   The extension that contains the config rewrites.
+   * @param string $rewrite_dir
+   *   The directory that contains config rewrites.
+   * @param string $langcode
+   *   (Optional) The langcode that this configuration is for, if applicable.
+   */
+  protected function rewriteDirectoryConfig($extension, $rewrite_dir, $langcode = NULL) {
+    if ($langcode && !$this->languageConfigFactoryOverride) {
+      return;
+    }
     // Scan the rewrite directory for rewrites.
-    if (file_exists($rewrite_dir) && $files = $this->fileScanDirectory($rewrite_dir, '/^.*\.yml$/i')) {
+    if (file_exists($rewrite_dir) && $files = $this->fileScanDirectory($rewrite_dir, '/^.*\.yml$/i', ['recurse' => FALSE])) {
       foreach ($files as $file) {
         // Parse the rewrites and retrieve the original config.
         $rewrite = Yaml::parse(file_get_contents($rewrite_dir . DIRECTORY_SEPARATOR . $file->name . '.yml'));
-        $original_config = $this->configFactory->getEditable($file->name);
-
-        // Rewrite and save the config.
-        $rewrite = $this->rewriteConfig($original_config->getRawData(), $rewrite);
+        if ($langcode) {
+          /** @var \Drupal\language\Config\LanguageConfigOverride $original_config */
+          $original_config = $this->languageConfigFactoryOverride->getOverride($langcode, $file->name);
+          $rewrite = $this->rewriteConfig($original_config->get(), $rewrite);
+        }
+        else {
+          $original_config = $this->configFactory->getEditable($file->name);
+          $rewrite = $this->rewriteConfig($original_config->getRawData(), $rewrite);
+        }
 
         // Unset 'config_rewrite' key before saving rewritten values.
         if (isset($rewrite['config_rewrite'])) {
@@ -83,7 +122,8 @@ class ConfigRewriter implements ConfigRewriterInterface {
         $result = $original_config->setData($rewrite)->save() ? 'rewritten' : 'not rewritten';
 
         // Log a message indicating whether the config was rewritten or not.
-        $this->logger->notice('@config @result by @module.', ['@config' => $file->name, '@result' => $result, '@module' => $extension->getName()]);
+        $log = $langcode ? '@config (@langcode) @result by @module' : '@config @result by @module';
+        $this->logger->notice($log, ['@config' => $file->name, '@result' => $result, '@module' => $extension->getName()]);
       }
     }
   }
@@ -116,7 +156,7 @@ class ConfigRewriter implements ConfigRewriterInterface {
    * @param $options
    *   An associative array of additional options.
    *
-   * @return
+   * @return array
    *   An associative array (keyed on the chosen key) of objects with 'uri',
    *   'filename', and 'name' properties corresponding to the matched files.
    */
