@@ -3,6 +3,7 @@
 namespace Drupal\config_rewrite\EventSubscriber;
 
 use Drupal\config_rewrite\ConfigRewriter;
+use Drupal\Core\Extension\ModuleEvents;
 use Symfony\Component\EventDispatcher\Event;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
