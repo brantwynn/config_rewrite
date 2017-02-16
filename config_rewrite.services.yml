@@ -8,6 +8,6 @@ services:
     arguments: ['config_rewrite']
   config_rewrite.install_subscriber:
     class: Drupal\config_rewrite\EventSubscriber\ConfigRewriteInstallSubscriber
-    arguments: ["@module_handler", "@config.factory", "@logger.factory", "@kernel"]
+    arguments: ["@config_rewrite.config_rewriter"]
     tags:
       - { name: event_subscriber }
