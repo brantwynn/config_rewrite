@@ -105,12 +105,14 @@ class ConfigRewriter implements ConfigRewriterInterface {
         $rewrite = Yaml::parse(file_get_contents($rewrite_dir . DIRECTORY_SEPARATOR . $file->name . '.yml'));
         if ($langcode) {
           /** @var \Drupal\language\Config\LanguageConfigOverride $original_config */
-          $original_config = $this->languageConfigFactoryOverride->getOverride($langcode, $file->name);
-          $rewrite = $this->rewriteConfig($original_config->get(), $rewrite);
+          $config = $this->languageConfigFactoryOverride->getOverride($langcode, $file->name);
+          $original_data = $config->get();
+          $rewrite = $this->rewriteConfig($original_data, $rewrite);
         }
         else {
-          $original_config = $this->configFactory->getEditable($file->name);
-          $rewrite = $this->rewriteConfig($original_config->getRawData(), $rewrite);
+          $config = $this->configFactory->getEditable($file->name);
+          $original_data = $config->getRawData();
+          $rewrite = $this->rewriteConfig($original_data, $rewrite);
         }
 
         // Unset 'config_rewrite' key before saving rewritten values.
@@ -118,8 +120,15 @@ class ConfigRewriter implements ConfigRewriterInterface {
           unset($rewrite['config_rewrite']);
         }
 
+        // Retain the original 'uuid' and '_core' keys.
+        foreach (['_core', 'uuid'] as $key) {
+          if (isset($original_data[$key])) {
+            $rewrite[$key] = $original_data[$key];
+          }
+        }
+
         // Save the rewritten configuration data.
-        $result = $original_config->setData($rewrite)->save() ? 'rewritten' : 'not rewritten';
+        $result = $config->setData($rewrite)->save() ? 'rewritten' : 'not rewritten';
 
         // Log a message indicating whether the config was rewritten or not.
         $log = $langcode ? '@config (@langcode) @result by @module' : '@config @result by @module';
