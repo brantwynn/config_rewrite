@@ -120,10 +120,16 @@ class ConfigRewriter implements ConfigRewriterInterface {
           unset($rewrite['config_rewrite']);
         }
 
-        // Retain the original 'uuid' and '_core' keys.
-        foreach (['_core', 'uuid'] as $key) {
-          if (isset($original_data[$key])) {
-            $rewrite[$key] = $original_data[$key];
+        // Retain the original 'uuid' and '_core' keys if it's not explicitly
+        // asked to rewrite them.
+        if (isset($rewrite['config_rewrite_uuids'])) {
+          unset($rewrite['config_rewrite_uuids']);
+        }
+        else {
+          foreach (['_core', 'uuid'] as $key) {
+            if (isset($original_data[$key])) {
+              $rewrite[$key] = $original_data[$key];
+            }
           }
         }
 
